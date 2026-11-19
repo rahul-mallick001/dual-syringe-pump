@@ -160,7 +160,7 @@ Each motion sequence sends a 10-byte parameter packet:
    - **Connector 1**: Rack 1 / Pump 1 (Channel A)
    - **Connector 2**: Rack 2 / Pump 2 (Channel B)
 3. Connect the 12V / 24V DC power supply to the pump base unit.
-4. Verify that the FTDI driver assigns a virtual COM port (e.g., `COM6` on Windows or `/dev/ttyUSB0` on Linux).
+4. Verify that the FTDI driver assigns a virtual COM port (e.g., `COM6` on Windows or `/dev/ttyUSB0` on Linux). If the device is not detected automatically, install the driver using `drivers/CDM212364_Setup_Win_11.exe`.
 
 ---
 
@@ -347,6 +347,9 @@ dual-syringe-pump/
 │   ├── sample_program.txt  # Standard 5-step infusion test
 │   ├── dual_program.txt    # Dual-channel program example
 │   └── alternating_program.txt # Infusion/withdrawal alternating steps
+├── drivers/                # USB-to-Serial converter driver installers
+│   ├── CDM212364_Setup_Win_11.exe # Windows 10 & 11 driver setup
+│   └── CDM v2.12.00 WHQL Certified.exe # WHQL certified driver setup
 └── tests/                  # Automated test suite (93 tests)
     ├── conftest.py / fake_pump.py  # Mock serial port hardware simulation
     ├── test_dual.py        # Dual pump execution tests
