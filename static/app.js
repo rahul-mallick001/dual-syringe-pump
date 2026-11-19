@@ -256,6 +256,9 @@ function render(next) {
       if (active !== el("durationUnit")) {
         updateSelectUnits(el("durationType"), el("durationUnit"), stepUnitVal);
       }
+      if (el("stepCalcDuration")) {
+        el("stepCalcDuration").textContent = `${step.calDuration ?? 0} s`;
+      }
     }
   }
 }

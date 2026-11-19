@@ -202,12 +202,22 @@ class ProgramData:
 
     def validate(self) -> str | None:
         """Mirror the checks of MainForm.GetData; returns an error or None."""
-        if self.diameter is None or self.diameter < 0:
+        if self.diameter is None or self.diameter <= 0:
             return "Please Enter the Valuable Parameters"
-        if self.flow_rate is None or self.flow_rate < 0:
+        if self.flow_rate is None or self.flow_rate <= 0:
             return "Please Enter the Valuable Parameters"
-        if not (1 <= self.duration <= 65535):
-            return "Please Enter the Syringe Pump Duration Between 1 To 65535"
+        if self.duration_type == DurationType.VOLUME:
+            if self.duration is None or self.duration <= 0:
+                return "Please Enter the Valuable Parameters"
+            cal_dur = self.compute_cal_duration()
+            if not (1.0 <= cal_dur <= 18.0 * 3600.0):
+                return "Adjust Target Volume Or Flowrate To Get A Duration Between 1 Second to 18 Hours"
+        else:
+            if self.duration is None or self.duration <= 0:
+                return "Please Enter the Syringe Pump Duration Between 1 To 65535"
+            cal_dur = self.compute_cal_duration()
+            if not (1.0 <= cal_dur <= 18.0 * 3600.0):
+                return "Please Enter the Syringe Pump Duration Between 1 To 65535"
         return None
 
 

@@ -419,6 +419,9 @@ class PumpController:
             err_a = self.pump_a.validate()
             if err_a:
                 raise RuntimeError(f"Pump 1: {err_a}")
+            safety_err_a = safety.check_step(self.pump_a)
+            if safety_err_a:
+                raise RuntimeError(f"Pump 1: {safety_err_a}")
             cmd_a = calculate_values(self.pump_a)
             if cmd_a.tdsp > 65535:
                 raise RuntimeError("Pump 1: Flow rate too low for 16-bit speed")
@@ -427,6 +430,9 @@ class PumpController:
             err_b = self.pump_b.validate()
             if err_b:
                 raise RuntimeError(f"Pump 2: {err_b}")
+            safety_err_b = safety.check_step(self.pump_b)
+            if safety_err_b:
+                raise RuntimeError(f"Pump 2: {safety_err_b}")
             cmd_b = calculate_values(self.pump_b)
             if cmd_b.tdsp > 65535:
                 raise RuntimeError("Pump 2: Flow rate too low for 16-bit speed")
