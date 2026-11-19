@@ -378,26 +378,35 @@ input:focus-visible, select:focus-visible {
 
 .params {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr);
-  gap: 10px 14px;
-  padding: 14px 16px;
+  grid-template-columns: max-content minmax(180px, 1fr) max-content minmax(280px, 1.2fr);
+  gap: 12px 18px;
+  padding: 16px 20px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: #fff;
+  align-items: center;
 }
 
-.cell { display: flex; align-items: center; gap: 6px; }
-.cell.label label { font-size: 11.5px; font-weight: 700; letter-spacing: 0.3px; color: #33404f; }
-.cell.label.right { justify-content: flex-end; }
-.cell.control.right { justify-content: flex-end; }
+.cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cell.label label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: #33404f;
+  white-space: nowrap;
+}
 .cell.label { grid-column: 1; }
 .cell.control { grid-column: 2; }
-.cell.label.right { grid-column: 3; justify-self: end; }
-.cell.control.right { grid-column: 4; justify-self: end; }
+.cell.label.right { grid-column: 3; justify-self: start; }
+.cell.control.right { grid-column: 4; justify-self: start; }
 
-input.narrow { width: 100px; }
-select.unit { width: 104px; }
-#programStep { width: 120px; }
+#diameter { width: 130px; }
+#flowRate { width: 80px; }
+#flowUnit { width: 94px; }
+#durationType { width: 96px; }
+#duration { width: 78px; }
+#durationUnit { width: 96px; }
+#programStep { width: 130px; }
 
 /* ---------- Toolbar ---------- */
 .toolbar {
