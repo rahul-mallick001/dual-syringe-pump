@@ -1,0 +1,28 @@
+Step : 1 
+Syringe Status : True 
+Withdrawal Status : False 
+Syringe_Diameter : 20 mm 
+Flow_Rate        : 1 Mlmin 
+Duration/TV      : Duration 1 Minute
+ 
+Step : 2 
+Syringe Status : True 
+Withdrawal Status : True 
+Syringe_Diameter : 20 mm 
+Flow_Rate        : 1 Mlmin 
+Duration/TV      : Duration 1 Minute
+ 
+Step : 3 
+Syringe Status : True 
+Withdrawal Status : False 
+Syringe_Diameter : 20 mm 
+Flow_Rate        : 1 Mlmin 
+Duration/TV      : Duration 1 Minute
+ 
+Step : 4 
+Syringe Status : True 
+Withdrawal Status : True 
+Syringe_Diameter : 20 mm 
+Flow_Rate        : 1 Mlmin 
+Duration/TV      : Duration 1 Minute
+ 

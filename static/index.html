@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dual Syringe Pump Control</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <main class="window">
+    <header class="titlebar">
+      <div class="brand">
+        <span class="logo-icon">⚗️</span>
+        <span class="title">Dual Syringe Pump</span>
+        <span class="badge">v2.0 Dual Axis</span>
+      </div>
+      <div class="connbar">
+        <label for="portSelect" class="sr-only">Serial Port</label>
+        <select id="portSelect" title="Select serial COM port"></select>
+        <button type="button" id="connectBtn" class="small">Connect</button>
+        <button type="button" id="refreshPortsBtn" class="small ghost" title="Refresh port list">↻</button>
+      </div>
+    </header>
+
+    <!-- Navigation / Mode Tabs -->
+    <nav class="mode-tabs" aria-label="Operation Mode">
+      <button type="button" class="tab-btn active" id="tabDualBtn" data-tab="dualMode">
+        <span class="tab-icon">⚡</span> Dual Pump Control (Simultaneous)
+      </button>
+      <button type="button" class="tab-btn" id="tabStepsBtn" data-tab="stepsMode">
+        <span class="tab-icon">📋</span> Multi-Step Program (Sequential)
+      </button>
+    </nav>
+
+    <!-- DUAL PUMP VIEW (SIMULTANEOUS) -->
+    <section id="dualMode" class="tab-panel active">
+      <div class="dual-grid">
+        <!-- PUMP 1 CARD -->
+        <article class="pump-card" id="pumpCardA" aria-label="Pump 1 Control">
+          <div class="pump-card-header">
+            <label class="check pump-enable-label" for="pumpA_enabled">
+              <input type="checkbox" id="pumpA_enabled" checked />
+              <span class="pump-name">PUMP 1</span>
+              <span class="pump-sub">(Connector 1)</span>
+            </label>
+            <span class="status-pill" id="pumpA_status">Ready</span>
+          </div>
+
+          <div class="param-grid">
+            <div class="field">
+              <label for="pumpA_diameter">Syringe Diameter (mm)</label>
+              <input id="pumpA_diameter" type="number" step="0.1" min="0.1" placeholder="e.g. 14.5" />
+            </div>
+
+            <div class="field">
+              <label for="pumpA_flowRate">Flow Rate</label>
+              <div class="input-unit-group">
+                <input id="pumpA_flowRate" type="number" step="0.01" min="0" placeholder="Rate" />
+                <select id="pumpA_flowUnit" aria-label="Pump 1 flow rate unit"></select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="pumpA_durationType">Target Setting</label>
+              <select id="pumpA_durationType" aria-label="Pump 1 target type"></select>
+            </div>
+
+            <div class="field">
+              <label for="pumpA_duration">Target Value</label>
+              <div class="input-unit-group">
+                <input id="pumpA_duration" type="number" step="0.1" min="0" placeholder="Target" />
+                <select id="pumpA_durationUnit" aria-label="Pump 1 target unit"></select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <div class="timer-block">
+              <span class="timer-label">Time Remaining</span>
+              <output id="pumpA_remaining" class="clock">00 : 00 : 00</output>
+            </div>
+            <div class="calc-block">
+              <span class="calc-label">Calculated Duration:</span>
+              <span id="pumpA_calcDuration" class="calc-value">0.00 s</span>
+            </div>
+          </div>
+        </article>
+
+        <!-- PUMP 2 CARD -->
+        <article class="pump-card" id="pumpCardB" aria-label="Pump 2 Control">
+          <div class="pump-card-header">
+            <label class="check pump-enable-label" for="pumpB_enabled">
+              <input type="checkbox" id="pumpB_enabled" checked />
+              <span class="pump-name">PUMP 2</span>
+              <span class="pump-sub">(Connector 2)</span>
+            </label>
+            <span class="status-pill" id="pumpB_status">Ready</span>
+          </div>
+
+          <div class="param-grid">
+            <div class="field">
+              <label for="pumpB_diameter">Syringe Diameter (mm)</label>
+              <input id="pumpB_diameter" type="number" step="0.1" min="0.1" placeholder="e.g. 14.5" />
+            </div>
+
+            <div class="field">
+              <label for="pumpB_flowRate">Flow Rate</label>
+              <div class="input-unit-group">
+                <input id="pumpB_flowRate" type="number" step="0.01" min="0" placeholder="Rate" />
+                <select id="pumpB_flowUnit" aria-label="Pump 2 flow rate unit"></select>
+              </div>
+            </div>
+
+            <div class="field">
+              <label for="pumpB_durationType">Target Setting</label>
+              <select id="pumpB_durationType" aria-label="Pump 2 target type"></select>
+            </div>
+
+            <div class="field">
+              <label for="pumpB_duration">Target Value</label>
+              <div class="input-unit-group">
+                <input id="pumpB_duration" type="number" step="0.1" min="0" placeholder="Target" />
+                <select id="pumpB_durationUnit" aria-label="Pump 2 target unit"></select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <div class="timer-block">
+              <span class="timer-label">Time Remaining</span>
+              <output id="pumpB_remaining" class="clock">00 : 00 : 00</output>
+            </div>
+            <div class="calc-block">
+              <span class="calc-label">Calculated Duration:</span>
+              <span id="pumpB_calcDuration" class="calc-value">0.00 s</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- MULTI-STEP PROGRAM VIEW (SEQUENTIAL) -->
+    <section id="stepsMode" class="tab-panel">
+      <div class="steps-header">
+        <label class="check"><input type="checkbox" id="selectAll" /> SELECT ALL STEPS</label>
+        <div class="stepboxes">
+          <label class="check"><input type="checkbox" class="stepcheck" data-index="0" /> 1</label>
+          <label class="check"><input type="checkbox" class="stepcheck" data-index="1" /> 2</label>
+          <label class="check"><input type="checkbox" class="stepcheck" data-index="2" /> 3</label>
+          <label class="check"><input type="checkbox" class="stepcheck" data-index="3" /> 4</label>
+          <label class="check"><input type="checkbox" class="stepcheck" data-index="4" /> 5</label>
+        </div>
+      </div>
+
+      <div class="params">
+        <div class="cell label"><label for="diameter">SYRINGE DIAMETER (mm)</label></div>
+        <div class="cell control"><input id="diameter" type="number" step="0.1" min="0" /></div>
+
+        <div class="cell label right"><label for="programStep">PROGRAM STEP</label></div>
+        <div class="cell control right">
+          <select id="programStep">
+            <option value="0">Step 1</option>
+            <option value="1">Step 2</option>
+            <option value="2">Step 3</option>
+            <option value="3">Step 4</option>
+            <option value="4">Step 5</option>
+          </select>
+        </div>
+
+        <div class="cell label"><label for="flowRate">FLOW RATE</label></div>
+        <div class="cell control">
+          <input id="flowRate" type="number" step="0.1" min="0" class="narrow" />
+          <select id="flowUnit" class="unit" aria-label="Step flow unit"></select>
+        </div>
+
+        <div class="cell label"><label for="duration">DURATION/TV</label></div>
+        <div class="cell control">
+          <select id="durationType" class="unit" aria-label="Step duration type"></select>
+          <input id="duration" type="number" step="0.1" min="0" class="narrow" />
+          <select id="durationUnit" class="unit" aria-label="Step duration unit"></select>
+        </div>
+
+        <div class="cell label"><label>STEP REMAINING</label></div>
+        <div class="cell control"><output id="stepRemaining" class="clock">00 : 00 : 00</output></div>
+
+        <div class="cell label right"><label>TOTAL REMAINING</label></div>
+        <div class="cell control right"><output id="totalRemaining" class="clock">00 : 00 : 00</output></div>
+      </div>
+    </section>
+
+    <!-- CONTROL TOOLBAR -->
+    <section class="toolbar">
+      <button type="button" id="emergencyBtn" class="estop" title="Emergency Stop - Halts motion instantly">
+        <span class="icon">⏹</span>
+        <span class="caption">EMERGENCY<br />STOP</span>
+      </button>
+
+      <button type="button" id="withdrawalBtn" class="toggle" title="Toggle Motion Direction (Forward Infusion / Reverse Withdrawal)">
+        <span class="icon" id="dirIcon">⇄</span>
+        <span class="caption" id="dirCaption">INFUSION</span>
+      </button>
+
+      <div class="toolgroup homing-group">
+        <button type="button" id="homeAllBtn" class="home-btn" title="Simultaneously home both racks (0x19)">
+          <span class="icon">🏠</span>
+          <small>Home Both</small>
+        </button>
+        <button type="button" id="homeBtn" class="home-btn" title="Home Rack 1 only (0x1A)">
+          <span class="icon">⌂</span>
+          <small>Home 1</small>
+        </button>
+        <button type="button" id="home2Btn" class="home-btn" title="Home Rack 2 only (0x1B)">
+          <span class="icon">⌂</span>
+          <small>Home 2</small>
+        </button>
+      </div>
+
+      <div class="toolgroup action-group">
+        <button type="button" id="runBtn" class="primary" title="Execute dual pump motion">
+          <span class="icon">▶</span>
+          <small>Run</small>
+        </button>
+        <button type="button" id="stopBtn" class="danger" title="Stop current operation (0x14)">
+          <span class="icon">■</span>
+          <small>Stop</small>
+        </button>
+      </div>
+
+      <div class="toolgroup file-group">
+        <button type="button" id="loadBtn" title="Load program file (*.txt)"><span class="icon">📂</span><small>Load</small></button>
+        <button type="button" id="saveBtn" title="Save program file"><span class="icon">💾</span><small>Save</small></button>
+      </div>
+    </section>
+
+    <!-- RACK HARDWARE STATUS STRIP -->
+    <section class="racks">
+      <div class="rack" id="rackCardA">
+        <div class="rackhead">
+          <span class="rackdot" id="rackDotA"></span>
+          <span class="rackname">PUMP 1</span>
+          <span class="rackconn">Channel A</span>
+        </div>
+        <div class="rackmeta">
+          <span>Home Switch: <b id="rackAHome">—</b></span>
+          <span>Status: <b id="rackAStatusBadge">—</b></span>
+        </div>
+      </div>
+      <div class="rack" id="rackCardB">
+        <div class="rackhead">
+          <span class="rackdot" id="rackDotB"></span>
+          <span class="rackname">PUMP 2</span>
+          <span class="rackconn">Channel B</span>
+        </div>
+        <div class="rackmeta">
+          <span>Home Switch: <b id="rackBHome">—</b></span>
+          <span>Status: <b id="rackBStatusBadge">—</b></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER STATUSBAR -->
+    <footer class="statusbar">
+      <div class="status-left">
+        <span class="status-indicator-dot" id="statusDot"></span>
+        <span id="statusText">Ready</span>
+      </div>
+
+      <div id="faultBar" class="hidden">
+        <span id="faultText"></span>
+        <button type="button" id="clearFaultBtn" class="small">Clear Fault</button>
+      </div>
+
+      <div class="status-right">
+        <span id="homeBar">
+          <label class="check smallcheck">
+            <input type="checkbox" id="atHomeBox" /> Rack 1 Home
+          </label>
+          <label class="check smallcheck">
+            <input type="checkbox" id="atHomeBox2" /> Rack 2 Home
+          </label>
+        </span>
+        <span class="com-badge" id="comText">Disconnected</span>
+      </div>
+    </footer>
+  </main>
+
+  <input type="file" id="filePicker" accept=".txt,text/plain" hidden />
+
+  <dialog id="saveDialog">
+    <form method="dialog">
+      <p>Save program as</p>
+      <input id="savePath" type="text" value="D:\Syringe-pump\dual_pump_prog.txt" />
+      <menu>
+        <button type="button" value="cancel" class="ghost" id="saveCancelBtn">Cancel</button>
+        <button type="submit" value="ok" class="primary">Save</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
