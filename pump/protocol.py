@@ -172,6 +172,9 @@ def build_pump_frame(
     ]
 
 
+build_dual_frame = build_pump_frame
+
+
 def send_values_frame(
     tdsp: float,
     duration_seconds: int,

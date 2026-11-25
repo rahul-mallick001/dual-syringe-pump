@@ -216,6 +216,14 @@ class PumpDevice:
             else:
                 self.write_byte(b)
 
+    send_dual_frame = send_frame_with_ack
+
+    def send_axis_direction(self, axis: str, withdrawal: bool) -> None:
+        """Send an independent direction byte for axis A (0x01/0x02) or B (0x03/0x04)."""
+        prof = protocol.profile_for(axis)
+        cmd = prof.direction_plus if withdrawal else prof.direction_minus
+        self.write_byte(cmd)
+
     def trigger_run(self, withdrawal: bool = False) -> None:
         """Trigger the queued frames to start moving (0x0F forward, 0x37 reverse)."""
         cmd = protocol.TRIGGER_REVERSE if withdrawal else protocol.TRIGGER_FORWARD
@@ -230,8 +238,16 @@ class PumpDevice:
         on_event: Callable[[int], None] | None = None,
         active_a: bool = True,
         active_b: bool = True,
+        withdrawal_a: bool | None = None,
+        withdrawal_b: bool | None = None,
+        poll_timeout_ms: int = 20,
     ) -> dict[str, bool]:
-        """Monitor running motion for completion or limit bytes."""
+        """Monitor running motion for completion or limit bytes.
+
+        Supports independent per-axis directions via `withdrawal_a` and `withdrawal_b`.
+        """
+        w_a = withdrawal if withdrawal_a is None else bool(withdrawal_a)
+        w_b = withdrawal if withdrawal_b is None else bool(withdrawal_b)
         deadline = time.monotonic() + max(0.0, expected_s) + max(0.0, grace_s)
         outcomes = {
             "a_done": False,
@@ -249,7 +265,7 @@ class PumpDevice:
                 self.stop()
                 raise StopRequested()
 
-            b = self.read_byte(50)
+            b = self.read_byte(poll_timeout_ms)
             if b is None:
                 continue
 
@@ -259,38 +275,33 @@ class PumpDevice:
                 except Exception:
                     pass
 
-            if not withdrawal:
-                if b == protocol.ACK_PUMP_A_DONE_FWD:
-                    outcomes["a_done"] = True
-                    if not active_b:
-                        return outcomes
-                elif b == protocol.ACK_PUMP_B_DONE_FWD:
-                    outcomes["b_done"] = True
-                    if not active_a:
-                        return outcomes
-                elif b == protocol.ACK_ALL_DONE:
-                    outcomes["all_done"] = True
+            if b == protocol.ACK_ALL_DONE:
+                outcomes["all_done"] = True
+                return outcomes
+
+            # Axis A completion & limits (independent of Axis B)
+            if (not w_a and b == protocol.ACK_PUMP_A_DONE_FWD) or (
+                w_a and b == protocol.ACK_PUMP_A_DONE_REV
+            ):
+                outcomes["a_done"] = True
+                if not active_b:
                     return outcomes
-                elif b == protocol.ACK_FAR_LIMIT_A:
-                    outcomes["far_limit_a"] = True
-                elif b == protocol.ACK_FAR_LIMIT_B:
-                    outcomes["far_limit_b"] = True
-            else:
-                if b == protocol.ACK_PUMP_A_DONE_REV:
-                    outcomes["a_done"] = True
-                    if not active_b:
-                        return outcomes
-                elif b == protocol.ACK_PUMP_B_DONE_REV:
-                    outcomes["b_done"] = True
-                    if not active_a:
-                        return outcomes
-                elif b == protocol.ACK_ALL_DONE:
-                    outcomes["all_done"] = True
+            elif b == protocol.ACK_FAR_LIMIT_A:
+                outcomes["far_limit_a"] = True
+            elif b == protocol.ACK_HOME_LIMIT_A:
+                outcomes["home_limit_a"] = True
+
+            # Axis B completion & limits (independent of Axis A)
+            if (not w_b and b == protocol.ACK_PUMP_B_DONE_FWD) or (
+                w_b and b == protocol.ACK_PUMP_B_DONE_REV
+            ):
+                outcomes["b_done"] = True
+                if not active_a:
                     return outcomes
-                elif b == protocol.ACK_HOME_LIMIT_A:
-                    outcomes["home_limit_a"] = True
-                elif b == protocol.ACK_HOME_LIMIT_B:
-                    outcomes["home_limit_b"] = True
+            elif b == protocol.ACK_FAR_LIMIT_B:
+                outcomes["far_limit_b"] = True
+            elif b == protocol.ACK_HOME_LIMIT_B:
+                outcomes["home_limit_b"] = True
 
         outcomes["timeout"] = True
         return outcomes

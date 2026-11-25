@@ -109,6 +109,14 @@ function render(next) {
   const active = document.activeElement;
   const busy = Boolean(next.running || next.homing);
 
+  if (window.CurveEditor && next.curve) {
+    window.CurveEditor.setPlayhead(
+      next.curve.elapsedS || 0,
+      next.curve.durationS || 0,
+      Boolean(next.running && next.isCurveMode)
+    );
+  }
+
   // Status Text & Dots
   const statusText = el("statusText");
   const statusDot = el("statusDot");
@@ -256,9 +264,6 @@ function render(next) {
       if (active !== el("durationUnit")) {
         updateSelectUnits(el("durationType"), el("durationUnit"), stepUnitVal);
       }
-      if (el("stepCalcDuration")) {
-        el("stepCalcDuration").textContent = `${step.calDuration ?? 0} s`;
-      }
     }
   }
 }
@@ -317,8 +322,16 @@ function wireTabs() {
       if (panel) panel.classList.add("active");
 
       // Notify backend of mode switch
-      const mode = currentTab === "stepsMode" ? "steps" : "dual";
+      const mode =
+        currentTab === "stepsMode"
+          ? "steps"
+          : currentTab === "curveMode"
+          ? "curve"
+          : "dual";
       api("/api/mode", { mode }).catch(() => {});
+      if (currentTab === "curveMode" && window.CurveEditor) {
+        window.CurveEditor.syncNow();
+      }
     });
   });
 }
@@ -413,8 +426,16 @@ function wireToolbar() {
   el("refreshPortsBtn").addEventListener("click", refreshPorts);
 
   // Motion controls - pass active mode
-  el("runBtn").addEventListener("click", () => {
-    const mode = currentTab === "stepsMode" ? "steps" : "dual";
+  el("runBtn").addEventListener("click", async () => {
+    const mode =
+      currentTab === "stepsMode"
+        ? "steps"
+        : currentTab === "curveMode"
+        ? "curve"
+        : "dual";
+    if (mode === "curve" && window.CurveEditor) {
+      await window.CurveEditor.syncNow();
+    }
     guard("Run", () => api("/api/run", { mode }));
   });
   el("stopBtn").addEventListener("click", () => guard("Stop", () => api("/api/stop")));

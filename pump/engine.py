@@ -12,6 +12,7 @@ import time
 import traceback
 from typing import Callable
 
+from . import curves
 from . import device as device_mod
 from . import protocol
 from . import safety
@@ -71,8 +72,14 @@ class PumpController:
         self.status_a = "Ready"
         self.status_b = "Ready"
 
-        # Mode flag: True = dual pump mode (default for UI), False = legacy step list
+        # Mode flags: dual (default), steps (legacy sequential), or curve (presets)
         self.is_dual_mode = True
+        self.is_curve_mode = False
+        self.curve_config: dict | None = None
+        self._curve_slices: list[curves.CompiledSlice] = []
+        self._curve_started = 0.0
+        self._curve_duration_s = 0.0
+        self._curve_slice_idx = 0
 
         # Multi-step sequential program (steps 1..5 initialized by default)
         self.steps: list[ProgramData] = [
@@ -210,9 +217,24 @@ class PumpController:
             m = str(mode).strip().lower()
             if m in ("dual", "simultaneous"):
                 self.is_dual_mode = True
+                self.is_curve_mode = False
             elif m in ("steps", "step", "sequential"):
                 self.is_dual_mode = False
+                self.is_curve_mode = False
+            elif m in ("curve", "curves", "preset", "presets"):
+                self.is_dual_mode = False
+                self.is_curve_mode = True
             self._recompute_preview()
+
+    def set_curve_config(self, config: dict) -> dict:
+        compiled = curves.compile_curve_config(config)
+        with self._lock:
+            self.curve_config = dict(config)
+            self._curve_slices = list(compiled["_compiled_slices"])
+            self._curve_duration_s = float(compiled["durationS"])
+            self._curve_slice_idx = 0
+        out = {k: v for k, v in compiled.items() if k != "_compiled_slices"}
+        return out
 
     def update_step(self, index: int, payload: dict) -> None:
         with self._lock:
@@ -250,6 +272,11 @@ class PumpController:
 
     def _recompute_preview(self) -> None:
         if self.running or self.homing:
+            return
+        if self.is_curve_mode:
+            if self.curve_config and self._curve_duration_s > 0:
+                self.total_total = float(self._curve_duration_s)
+                self.total_remaining = float(self._curve_duration_s)
             return
         if not self.is_dual_mode and self.steps:
             chosen = [s for s, on in zip(self.steps, self.selected) if on]
@@ -392,19 +419,81 @@ class PumpController:
             if self.running or self.homing:
                 raise RuntimeError("process already in progress")
 
-            target_mode = mode or ("dual" if self.is_dual_mode else "steps")
+            target_mode = mode or (
+                "curve" if self.is_curve_mode else ("dual" if self.is_dual_mode else "steps")
+            )
 
             if target_mode == "dual":
                 self._prepare_dual_run()
+                worker = self._run_dual_worker
+            elif target_mode == "curve":
+                self._prepare_curve_run()
+                worker = self._run_curve_worker
             else:
                 self._prepare_steps_run()
+                worker = self._run_steps_worker
 
         self._thread = threading.Thread(
-            target=self._run_dual_worker if target_mode == "dual" else self._run_steps_worker,
+            target=worker,
             name="MotorRun",
             daemon=True,
         )
         self._thread.start()
+
+    def _prepare_curve_run(self) -> None:
+        if not self.curve_config:
+            self.curve_config = {
+                "yMode": "velocity",
+                "unit": "mL/min",
+                "timeUnit": "s",
+                "duration": 60,
+                "sliceDurationS": 0.25,
+                "channelA": {
+                    "enabled": True,
+                    "diameter": 14.5,
+                    "source": "preset",
+                    "preset": "shifted_sine",
+                    "amplitude": 1.0,
+                    "offset": 1.0,
+                },
+                "channelB": {
+                    "enabled": True,
+                    "diameter": 14.5,
+                    "source": "preset",
+                    "preset": "shifted_cosine",
+                    "amplitude": 1.0,
+                    "offset": 1.0,
+                },
+            }
+        compiled = curves.compile_curve_config(self.curve_config)
+        slices = compiled["_compiled_slices"]
+        if not slices:
+            raise RuntimeError("Curve produced no executable time slices")
+
+        has_any_motion = any(s.active_a or s.active_b for s in slices)
+        if not has_any_motion:
+            raise RuntimeError("Curve has zero motion on both channels")
+
+        for s in slices:
+            if s.cmd_a and s.cmd_a.tdsp > 65535:
+                raise RuntimeError(f"Pump 1 slice {s.index + 1}: flow rate too low for 16-bit speed")
+            if s.cmd_b and s.cmd_b.tdsp > 65535:
+                raise RuntimeError(f"Pump 2 slice {s.index + 1}: flow rate too low for 16-bit speed")
+
+        self._curve_slices = list(slices)
+        self._curve_duration_s = float(sum(s.duration_s for s in slices))
+        self._curve_slice_idx = 0
+        self._curve_started = time.monotonic()
+        self._stop_event = threading.Event()
+        self.running = True
+        self.error = None
+        self.status = "Running Curve..."
+        self.total_total = self._curve_duration_s
+        self.total_remaining = self._curve_duration_s
+        self.step_total = float(slices[0].duration_s)
+        self.step_remaining = self.step_total
+        self.status_a = "Curve Active"
+        self.status_b = "Curve Active"
 
     def _prepare_dual_run(self) -> None:
         active_a = bool(self.pump_a.pumb_status)
@@ -419,9 +508,6 @@ class PumpController:
             err_a = self.pump_a.validate()
             if err_a:
                 raise RuntimeError(f"Pump 1: {err_a}")
-            safety_err_a = safety.check_step(self.pump_a)
-            if safety_err_a:
-                raise RuntimeError(f"Pump 1: {safety_err_a}")
             cmd_a = calculate_values(self.pump_a)
             if cmd_a.tdsp > 65535:
                 raise RuntimeError("Pump 1: Flow rate too low for 16-bit speed")
@@ -430,9 +516,6 @@ class PumpController:
             err_b = self.pump_b.validate()
             if err_b:
                 raise RuntimeError(f"Pump 2: {err_b}")
-            safety_err_b = safety.check_step(self.pump_b)
-            if safety_err_b:
-                raise RuntimeError(f"Pump 2: {safety_err_b}")
             cmd_b = calculate_values(self.pump_b)
             if cmd_b.tdsp > 65535:
                 raise RuntimeError("Pump 2: Flow rate too low for 16-bit speed")
@@ -638,6 +721,154 @@ class PumpController:
                 if self.status != "Program completed":
                     self._recompute_preview()
 
+    def _run_curve_worker(self) -> None:
+        dev = self._device
+        try:
+            if dev is None:
+                raise device_mod.PumpError("device not connected")
+            dev.connect()
+
+            with self._lock:
+                slices = list(self._curve_slices)
+
+            if not slices:
+                with self._lock:
+                    self.status = "Program completed"
+                return
+
+            def _build_frames(sl: CompiledSlice):
+                fa = None
+                fb = None
+                if sl.active_a and sl.cmd_a:
+                    fa = protocol.build_pump_frame(
+                        axis="A",
+                        tdsp=sl.cmd_a.tdsp,
+                        duration_seconds=sl.cmd_a.duration_step,
+                        prescaler=sl.cmd_a.prescaler,
+                    )
+                if sl.active_b and sl.cmd_b:
+                    fb = protocol.build_pump_frame(
+                        axis="B",
+                        tdsp=sl.cmd_b.tdsp,
+                        duration_seconds=sl.cmd_b.duration_step,
+                        prescaler=sl.cmd_b.prescaler,
+                    )
+                return fa, fb
+
+            curr_frame_a, curr_frame_b = _build_frames(slices[0])
+
+            for idx, sl in enumerate(slices):
+                if self._stop_event.is_set():
+                    raise device_mod.StopRequested()
+
+                with self._lock:
+                    self._curve_slice_idx = idx
+                    self.step_total = float(sl.duration_s)
+                    self.step_remaining = float(sl.duration_s)
+                    self.status = f"Curve Slice {idx + 1}/{len(slices)}"
+                    self.status_a = (
+                        ("Withdrawing" if sl.withdrawal_a else "Infusing")
+                        if sl.active_a
+                        else "Dwell"
+                    )
+                    self.status_b = (
+                        ("Withdrawing" if sl.withdrawal_b else "Infusing")
+                        if sl.active_b
+                        else "Dwell"
+                    )
+
+                if not sl.active_a and not sl.active_b:
+                    # Dwell slice: wait for slice duration while honoring stop_event
+                    deadline = time.monotonic() + sl.duration_s
+                    while time.monotonic() < deadline:
+                        if self._stop_event.is_set():
+                            raise device_mod.StopRequested()
+                        time.sleep(min(0.02, max(0.001, deadline - time.monotonic())))
+                    if idx + 1 < len(slices):
+                        curr_frame_a, curr_frame_b = _build_frames(slices[idx + 1])
+                    continue
+
+                if sl.active_a and curr_frame_a:
+                    dev.send_frame_with_ack(curr_frame_a, stop_event=self._stop_event)
+
+                if sl.active_b and curr_frame_b:
+                    dev.send_frame_with_ack(curr_frame_b, stop_event=self._stop_event)
+
+                # Independent per-axis direction handling
+                opposite_dirs = (
+                    sl.active_a and sl.active_b and (sl.withdrawal_a != sl.withdrawal_b)
+                )
+                if opposite_dirs:
+                    dev.send_axis_direction("A", sl.withdrawal_a)
+                    dev.send_axis_direction("B", sl.withdrawal_b)
+                    dev.trigger_run(withdrawal=False)
+                else:
+                    shared_w = sl.withdrawal_a if sl.active_a else sl.withdrawal_b
+                    dev.trigger_run(withdrawal=shared_w)
+
+                # Pre-build frames for next slice while motor is in motion
+                if idx + 1 < len(slices):
+                    next_frame_a, next_frame_b = _build_frames(slices[idx + 1])
+                else:
+                    next_frame_a, next_frame_b = None, None
+
+                outcomes = dev.wait_dual_outcome(
+                    expected_s=sl.duration_s,
+                    withdrawal=False,
+                    stop_event=self._stop_event,
+                    active_a=sl.active_a,
+                    active_b=sl.active_b,
+                    withdrawal_a=sl.withdrawal_a,
+                    withdrawal_b=sl.withdrawal_b,
+                    poll_timeout_ms=5,
+                )
+
+                curr_frame_a, curr_frame_b = next_frame_a, next_frame_b
+
+                if outcomes.get("far_limit_a") or outcomes.get("far_limit_b"):
+                    with self._lock:
+                        self.status = "Far Limit Reached"
+                        self.fault = "Far limit reached during curve execution"
+                    return
+                if outcomes.get("home_limit_a") or outcomes.get("home_limit_b"):
+                    with self._lock:
+                        if outcomes.get("home_limit_a"):
+                            self.at_home = True
+                        if outcomes.get("home_limit_b"):
+                            self.at_home2 = True
+                        self.status = "Home Limit Reached"
+                    return
+
+            with self._lock:
+                self.status = "Program completed"
+                self.status_a = "Program Completed"
+                self.status_b = "Program Completed"
+                self.step_remaining = 0.0
+                self.total_remaining = 0.0
+        except device_mod.StopRequested:
+            try:
+                if dev:
+                    dev.stop()
+            except Exception:
+                pass
+            with self._lock:
+                self.status = "Program Terminated"
+                self.status_a = "Program Terminated"
+                self.status_b = "Program Terminated"
+        except Exception as exc:
+            try:
+                if dev:
+                    dev.stop()
+            except Exception:
+                pass
+            with self._lock:
+                self.status = "Error"
+                self.error = str(exc)
+                self._trace.append(traceback.format_exc(limit=2))
+        finally:
+            with self._lock:
+                self.running = False
+
     def _run_steps_worker(self) -> None:
         dev = self._device
         try:
@@ -797,9 +1028,14 @@ class PumpController:
             total_remaining = self.total_remaining
             rem_a = self._dur_a
             rem_b = self._dur_b
+            curve_elapsed = 0.0
             if self.running:
                 now = time.monotonic()
-                if not self.is_dual_mode:
+                if self.is_curve_mode:
+                    curve_elapsed = max(0.0, min(self._curve_duration_s, now - self._curve_started))
+                    total_remaining = max(0.0, self._curve_duration_s - curve_elapsed)
+                    step_remaining = total_remaining
+                elif not self.is_dual_mode:
                     elapsed = max(0.0, now - self._step_started)
                     step_remaining = max(0.0, self.step_total - elapsed)
                     total_remaining = max(0.0, self.total_remaining - elapsed)
@@ -867,8 +1103,15 @@ class PumpController:
                         "remainingHMS": format_hms(rem_b),
                     },
                 },
-                "mode": "dual" if self.is_dual_mode else "steps",
+                "mode": "curve" if self.is_curve_mode else ("dual" if self.is_dual_mode else "steps"),
                 "isDualMode": self.is_dual_mode,
+                "isCurveMode": self.is_curve_mode,
+                "curve": {
+                    "elapsedS": round(curve_elapsed, 2),
+                    "durationS": round(self._curve_duration_s, 2),
+                    "sliceIndex": self._curve_slice_idx,
+                    "sliceCount": len(self._curve_slices),
+                },
                 "currentStep": self.current_step,
                 "stepRemaining": format_hms(step_remaining),
                 "totalRemaining": format_hms(total_remaining),

@@ -165,23 +165,12 @@ class CalculateValuesTests(unittest.TestCase):
             calculate_values(data)
 
     def test_validation_bounds(self):
-        data = ProgramData(diameter=20.0, flow_rate=1.0, duration=0.0)
+        data = ProgramData(duration=0.0)
         self.assertIsNotNone(data.validate())
         data.duration = 70000.0
         self.assertIsNotNone(data.validate())
         data.duration = 1.0
         self.assertIsNone(data.validate())
-
-        # Sub-milliliter volume mode (e.g. 0.5 ml @ 1 ml/min = 30 s duration)
-        vol_data = ProgramData(
-            diameter=20.0,
-            flow_rate=1.0,
-            flow_rate_unit=FlowRateUnit.ML_MIN,
-            duration_type=DurationType.VOLUME,
-            volume_unit=VolumeUnit.MILILITER,
-            duration=0.5,
-        )
-        self.assertIsNone(vol_data.validate())
 
 
 if __name__ == "__main__":

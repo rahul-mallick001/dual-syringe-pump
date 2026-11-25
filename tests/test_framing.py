@@ -54,6 +54,12 @@ class FrameTests(unittest.TestCase):
         frame = protocol.send_values_frame(100, 10, 8)
         self.assertEqual(len(frame), 10)
 
+    def test_build_pump_frame_subsecond_duration(self):
+        frame_25 = protocol.build_pump_frame("A", tdsp=1000, duration_seconds=0.25, prescaler=1)
+        self.assertEqual(frame_25[3:7], [0x00, 0x00, 0x00, 0x19])
+        frame_10 = protocol.build_pump_frame("B", tdsp=1000, duration_seconds=0.10, prescaler=1)
+        self.assertEqual(frame_10[3:7], [0x00, 0x00, 0x00, 0x0A])
+
 
 class WithdrawalTests(unittest.TestCase):
     def test_direction_bytes(self):

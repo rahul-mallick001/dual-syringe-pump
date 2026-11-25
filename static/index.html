@@ -30,6 +30,9 @@
       <button type="button" class="tab-btn" id="tabStepsBtn" data-tab="stepsMode">
         <span class="tab-icon">📋</span> Multi-Step Program (Sequential)
       </button>
+      <button type="button" class="tab-btn" id="tabCurveBtn" data-tab="curveMode">
+        <span class="tab-icon">📈</span> Curve / Waveform Presets
+      </button>
     </nav>
 
     <!-- DUAL PUMP VIEW (SIMULTANEOUS) -->
@@ -173,21 +176,192 @@
           <select id="flowUnit" class="unit" aria-label="Step flow unit"></select>
         </div>
 
-        <div class="cell label right"><label for="duration">DURATION / TV</label></div>
-        <div class="cell control right">
+        <div class="cell label"><label for="duration">DURATION/TV</label></div>
+        <div class="cell control">
           <select id="durationType" class="unit" aria-label="Step duration type"></select>
           <input id="duration" type="number" step="0.1" min="0" class="narrow" />
           <select id="durationUnit" class="unit" aria-label="Step duration unit"></select>
         </div>
 
-        <div class="cell label"><label>CALCULATED DURATION</label></div>
-        <div class="cell control"><output id="stepCalcDuration" class="clock">0 s</output></div>
-
-        <div class="cell label right"><label>STEP REMAINING</label></div>
-        <div class="cell control right"><output id="stepRemaining" class="clock">00 : 00 : 00</output></div>
+        <div class="cell label"><label>STEP REMAINING</label></div>
+        <div class="cell control"><output id="stepRemaining" class="clock">00 : 00 : 00</output></div>
 
         <div class="cell label right"><label>TOTAL REMAINING</label></div>
         <div class="cell control right"><output id="totalRemaining" class="clock">00 : 00 : 00</output></div>
+      </div>
+    </section>
+
+    <!-- CURVE / WAVEFORM PRESETS VIEW -->
+    <section id="curveMode" class="tab-panel">
+      <div class="curve-toolbar">
+        <div class="curve-control-group">
+          <span class="curve-group-label">Y-Axis Mode</span>
+          <div class="radio-pills" id="curveYModeGroup">
+            <label><input type="radio" name="curveYMode" value="velocity" checked /> Velocity</label>
+            <label><input type="radio" name="curveYMode" value="displacement" /> Displacement</label>
+          </div>
+        </div>
+
+        <div class="curve-control-group">
+          <span class="curve-group-label">Units</span>
+          <div class="radio-pills" id="curveUnitGroup"></div>
+        </div>
+
+        <div class="curve-control-group">
+          <span class="curve-group-label">Time Axis &amp; Discretization</span>
+          <div class="curve-inline">
+            <input id="curveDuration" type="number" step="1" min="1" value="60" style="width:64px" title="Total duration" />
+            <select id="curveTimeUnit" aria-label="Time unit">
+              <option value="s" selected>s</option>
+              <option value="min">min</option>
+              <option value="hr">hr</option>
+            </select>
+            <label class="curve-mini-label" title="Discretization time step / slice duration in seconds">
+              Step:
+              <input id="curveSliceS" type="number" step="0.05" min="0.05" max="10" value="0.25" style="width:58px" /> s
+            </label>
+            <div class="curve-step-pills" title="Quick-select time discretization step">
+              <button type="button" class="curve-pill-btn" data-step="0.10">0.1s</button>
+              <button type="button" class="curve-pill-btn active" data-step="0.25">0.25s</button>
+              <button type="button" class="curve-pill-btn" data-step="0.50">0.5s</button>
+              <button type="button" class="curve-pill-btn" data-step="1.00">1.0s</button>
+              <button type="button" class="curve-pill-btn" data-step="2.00">2.0s</button>
+            </div>
+            <span id="curveResolutionBadge" class="curve-res-badge" title="Discretization resolution: total slices and update frequency">240 slices (4.0 Hz • 0.25s)</span>
+          </div>
+        </div>
+
+        <div class="curve-control-group">
+          <span class="curve-group-label">Channel Linking</span>
+          <div class="curve-inline">
+            <select id="curveLinkMode" aria-label="Channel link mode">
+              <option value="independent">Independent</option>
+              <option value="B_from_A">Pump 2 = k × Pump 1</option>
+              <option value="A_from_B">Pump 1 = k × Pump 2</option>
+            </select>
+            <label class="curve-mini-label">k =
+              <input id="curveLinkFactor" type="number" step="0.1" value="-1" style="width:60px" />
+            </label>
+            <button type="button" id="curveBakeLinkBtn" class="small ghost" title="Copy scaled curve and unlink">Unlink &amp; Keep</button>
+            <button type="button" id="curvePushPullBtn" class="small" title="Set Pump 1 to Shifted Sine and Pump 2 to Shifted Cosine">Push-Pull (Sin/Cos)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="curve-dual-grid">
+        <!-- PUMP 1 CURVE CARD -->
+        <article class="curve-card" id="curveCardA">
+          <div class="curve-card-head">
+            <label class="check">
+              <input type="checkbox" id="curveA_enabled" checked />
+              <strong>PUMP 1 (Channel A)</strong>
+            </label>
+            <div class="curve-inline">
+              <label class="curve-mini-label">Ø (mm)
+                <input id="curveA_diameter" type="number" step="0.1" min="0.1" value="14.5" style="width:62px" />
+              </label>
+              <label class="curve-mini-label">Cap (mL)
+                <input id="curveA_capacity" type="number" step="1" min="0" value="20" style="width:56px" />
+              </label>
+              <label class="check smallcheck" title="Invert physical direction for Pump 1">
+                <input type="checkbox" id="curveA_invert" /> Invert Dir
+              </label>
+            </div>
+          </div>
+
+          <div class="curve-source-row">
+            <select id="curveA_preset" aria-label="Pump 1 waveform preset">
+              <option value="bezier">Custom Bézier</option>
+              <option value="linear">Linear Ramp</option>
+              <option value="constant">Constant</option>
+              <option value="shifted_sine" selected>Shifted Sine</option>
+              <option value="shifted_cosine">Shifted Cosine</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="triangle">Triangle</option>
+              <option value="pulse">Pulse / Step</option>
+              <option value="equation">Custom Equation</option>
+            </select>
+            <div class="curve-preset-params" id="curveA_presetParams">
+              <label id="curveA_ampLabel">Amp <input id="curveA_amp" type="number" step="0.1" value="1.0" /></label>
+              <label id="curveA_cyclesLabel">Cyc <input id="curveA_cycles" type="number" step="0.5" min="0.1" value="1" /></label>
+              <label id="curveA_phaseLabel">Phase° <input id="curveA_phase" type="number" step="15" value="0" /></label>
+              <label id="curveA_offsetLabel">Offset <input id="curveA_offset" type="number" step="0.1" value="1.0" /></label>
+              <label id="curveA_dutyLabel" style="display:none">Duty <input id="curveA_duty" type="number" step="0.05" min="0.05" max="0.95" value="0.5" /></label>
+              <button type="button" id="curveA_toBezier" class="small ghost" title="Convert current curve into draggable Bézier knots">→ Bézier</button>
+            </div>
+          </div>
+
+          <div class="curve-eq-row" id="curveA_eqRow" style="display:none">
+            <label for="curveA_eq">y(t) =</label>
+            <input id="curveA_eq" type="text" value="1.0 + 1.0 * sin(2 * pi * t / T)" placeholder="e.g. 1.5 * sin(2*pi*t/T) + 1.5" />
+            <button type="button" id="curveA_applyEq" class="small">Apply</button>
+          </div>
+          <div class="curve-eq-err hidden" id="curveA_eqErr"></div>
+
+          <div class="curve-canvas-wrap">
+            <canvas id="curveCanvasA" width="520" height="240"></canvas>
+            <div class="curve-canvas-hint" id="curveA_hint" style="display:none">Drag knots &amp; handles • Double-click to add knot • Right-click knot to delete</div>
+          </div>
+
+          <div class="curve-metrics" id="curveMetricsA"></div>
+        </article>
+
+        <!-- PUMP 2 CURVE CARD -->
+        <article class="curve-card" id="curveCardB">
+          <div class="curve-card-head">
+            <label class="check">
+              <input type="checkbox" id="curveB_enabled" checked />
+              <strong>PUMP 2 (Channel B)</strong>
+            </label>
+            <div class="curve-inline">
+              <label class="curve-mini-label">Ø (mm)
+                <input id="curveB_diameter" type="number" step="0.1" min="0.1" value="14.5" style="width:62px" />
+              </label>
+              <label class="curve-mini-label">Cap (mL)
+                <input id="curveB_capacity" type="number" step="1" min="0" value="20" style="width:56px" />
+              </label>
+              <label class="check smallcheck" title="Invert physical direction for Pump 2">
+                <input type="checkbox" id="curveB_invert" /> Invert Dir
+              </label>
+            </div>
+          </div>
+
+          <div class="curve-source-row">
+            <select id="curveB_preset" aria-label="Pump 2 waveform preset">
+              <option value="bezier">Custom Bézier</option>
+              <option value="linear">Linear Ramp</option>
+              <option value="constant">Constant</option>
+              <option value="shifted_sine">Shifted Sine</option>
+              <option value="shifted_cosine" selected>Shifted Cosine</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="triangle">Triangle</option>
+              <option value="pulse">Pulse / Step</option>
+              <option value="equation">Custom Equation</option>
+            </select>
+            <div class="curve-preset-params" id="curveB_presetParams">
+              <label id="curveB_ampLabel">Amp <input id="curveB_amp" type="number" step="0.1" value="1.0" /></label>
+              <label id="curveB_cyclesLabel">Cyc <input id="curveB_cycles" type="number" step="0.5" min="0.1" value="1" /></label>
+              <label id="curveB_phaseLabel">Phase° <input id="curveB_phase" type="number" step="15" value="0" /></label>
+              <label id="curveB_offsetLabel">Offset <input id="curveB_offset" type="number" step="0.1" value="1.0" /></label>
+              <label id="curveB_dutyLabel" style="display:none">Duty <input id="curveB_duty" type="number" step="0.05" min="0.05" max="0.95" value="0.5" /></label>
+              <button type="button" id="curveB_toBezier" class="small ghost" title="Convert current curve into draggable Bézier knots">→ Bézier</button>
+            </div>
+          </div>
+
+          <div class="curve-eq-row" id="curveB_eqRow" style="display:none">
+            <label for="curveB_eq">y(t) =</label>
+            <input id="curveB_eq" type="text" value="1.0 + 1.0 * cos(2 * pi * t / T)" placeholder="e.g. 1.5 * cos(2*pi*t/T) + 1.5" />
+            <button type="button" id="curveB_applyEq" class="small">Apply</button>
+          </div>
+          <div class="curve-eq-err hidden" id="curveB_eqErr"></div>
+
+          <div class="curve-canvas-wrap">
+            <canvas id="curveCanvasB" width="520" height="240"></canvas>
+            <div class="curve-canvas-hint" id="curveB_hint" style="display:none">Drag knots &amp; handles • Double-click to add knot • Right-click knot to delete</div>
+          </div>
+
+          <div class="curve-metrics" id="curveMetricsB"></div>
+        </article>
       </div>
     </section>
 
@@ -300,6 +474,7 @@
     </form>
   </dialog>
 
+  <script src="/static/curves.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

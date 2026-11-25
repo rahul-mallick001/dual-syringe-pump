@@ -165,6 +165,37 @@ class EngineTests(unittest.TestCase):
         second_dir = written.index(0x01, first_dir + 1)
         self.assertLess(first_dir, second_dir)
 
+    def test_curve_run_subsecond_slices(self):
+        controller = self.build()
+        controller.connect("FAKE")
+        controller.set_mode("curve")
+        controller.set_curve_config({
+            "yMode": "velocity",
+            "unit": "mL/min",
+            "timeUnit": "s",
+            "duration": 1.0,
+            "sliceDurationS": 0.25,
+            "channelA": {
+                "enabled": True,
+                "diameter": 14.5,
+                "source": "preset",
+                "preset": "constant",
+                "amplitude": 2.0,
+                "offset": 0.0,
+            },
+            "channelB": {
+                "enabled": False,
+                "diameter": 14.5,
+            },
+        })
+        controller.run()
+        self.assertTrue(self.wait_idle(controller))
+        self.assertEqual(controller.state()["status"], "Program completed")
+        written = self.fake.last.written
+        openers = [b for b in written if b == 0x0A]
+        self.assertGreaterEqual(len(openers), 4)
+
+
 
 if __name__ == "__main__":
     unittest.main()

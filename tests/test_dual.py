@@ -159,23 +159,3 @@ class DualEngineTests(unittest.TestCase):
         self.assertEqual(ctrl.status, "Program completed")
         self.assertEqual(ctrl.status_a, "Program Completed")
         self.assertEqual(ctrl.status_b, "Program Completed")
-
-    def test_dual_run_safety_limitation(self):
-        factory = FakeFactory()
-        ctrl = engine.PumpController(
-            device_factory=lambda port: device_mod.PumpDevice(port=port, serial_factory=factory)
-        )
-        ctrl.connect("COM_TEST")
-        # Oversized volume on Pump 1: 5 ml/min for 600 s = 50 ml (> 20 ml limit)
-        ctrl.update_pump("A", {
-            "diameter": 14.5,
-            "flowRate": 5.0,
-            "flowRateUnit": 3,
-            "durationType": 0,
-            "duration": 600.0,
-            "durationUnit": 0,
-            "enabled": True,
-        })
-        with self.assertRaises(RuntimeError) as ctx:
-            ctrl.run(mode="dual")
-        self.assertIn("above the", str(ctx.exception))

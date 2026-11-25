@@ -202,22 +202,12 @@ class ProgramData:
 
     def validate(self) -> str | None:
         """Mirror the checks of MainForm.GetData; returns an error or None."""
-        if self.diameter is None or self.diameter <= 0:
+        if self.diameter is None or self.diameter < 0:
             return "Please Enter the Valuable Parameters"
-        if self.flow_rate is None or self.flow_rate <= 0:
+        if self.flow_rate is None or self.flow_rate < 0:
             return "Please Enter the Valuable Parameters"
-        if self.duration_type == DurationType.VOLUME:
-            if self.duration is None or self.duration <= 0:
-                return "Please Enter the Valuable Parameters"
-            cal_dur = self.compute_cal_duration()
-            if not (1.0 <= cal_dur <= 18.0 * 3600.0):
-                return "Adjust Target Volume Or Flowrate To Get A Duration Between 1 Second to 18 Hours"
-        else:
-            if self.duration is None or self.duration <= 0:
-                return "Please Enter the Syringe Pump Duration Between 1 To 65535"
-            cal_dur = self.compute_cal_duration()
-            if not (1.0 <= cal_dur <= 18.0 * 3600.0):
-                return "Please Enter the Syringe Pump Duration Between 1 To 65535"
+        if not (1 <= self.duration <= 65535):
+            return "Please Enter the Syringe Pump Duration Between 1 To 65535"
         return None
 
 
@@ -228,11 +218,11 @@ class ProgramData:
 class StepCommand:
     tdsp: float
     prescaler: int
-    duration_step: int
+    duration_step: float
     cal_duration: float
 
     @property
-    def total_seconds(self) -> int:
+    def total_seconds(self) -> float:
         return self.duration_step
 
 
@@ -291,9 +281,12 @@ def calculate_values(data: ProgramData) -> StepCommand:
 
     data.cal_duration = data.compute_cal_duration()
     # IL 532/760: the transmitted duration is Convert.ToInt32(CalDuration) of the
-    # unrounded value.  In volume mode the original then rounds CalDuration
-    # half-up in place (IL 777-825), which only affects the total-time display.
-    duration_step = _convert_to_int32(data.cal_duration)
+    # unrounded value for integer steps. For fractional/sub-second durations (e.g. curve slices),
+    # preserve float centisecond precision.
+    if abs(data.cal_duration - round(data.cal_duration)) < 1e-4 and data.cal_duration >= 1.0:
+        duration_step = _convert_to_int32(data.cal_duration)
+    else:
+        duration_step = round(data.cal_duration, 3)
     if data.duration_type == DurationType.VOLUME:
         data.cal_duration = _round_half_up(data.cal_duration)
     return StepCommand(

@@ -2,13 +2,13 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com/)
-[![Tests](https://img.shields.io/badge/tests-93%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-122%20passed-brightgreen.svg)]()
 [![Hardware](https://img.shields.io/badge/hardware-Holmarc%20Dual%20Axis-orange.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 A modern, high-precision, web-based control application and serial protocol driver for dual-axis microfluidic syringe pumps (specifically engineered for Holmarc Dual Syringe Pump hardware).
 
-This system replaces legacy proprietary Windows software with a cross-platform, asynchronous Python architecture featuring simultaneous dual-rack dispensing, multi-step sequential programming, real-time hardware limit-switch monitoring, and a responsive web dashboard.
+This system replaces legacy proprietary Windows software with a cross-platform, asynchronous Python architecture featuring simultaneous dual-rack dispensing, multi-step sequential programming, interactive mathematical curve/waveform presets, real-time hardware limit-switch monitoring, sub-second continuous velocity ramping, and a responsive web dashboard.
 
 ---
 
@@ -19,9 +19,13 @@ This system replaces legacy proprietary Windows software with a cross-platform, 
 - [Mathematical Model & Protocol Fidelity](#mathematical-model--protocol-fidelity)
   - [Flow Rate & Prescaler Calculations](#flow-rate--prescaler-calculations)
   - [Hardware Protocol & Wire Framing](#hardware-protocol--wire-framing)
+  - [Centisecond Sub-Second Timing & Backlash Elimination](#centisecond-sub-second-timing--backlash-elimination)
 - [Hardware Setup & Wiring](#hardware-setup--wiring)
 - [Installation & Quickstart](#installation--quickstart)
 - [Web Interface Overview](#web-interface-overview)
+  - [1. Dual Pump Control (Simultaneous)](#1-dual-pump-control-simultaneous)
+  - [2. Multi-Step Program (Sequential)](#2-multi-step-program-sequential)
+  - [3. Curve & Waveform Presets (Dynamic Profiling)](#3-curve--waveform-presets-dynamic-profiling)
 - [REST API Reference](#rest-api-reference)
 - [Test Suite & Verification](#test-suite--verification)
 - [Project Directory Structure](#project-directory-structure)
@@ -32,16 +36,22 @@ This system replaces legacy proprietary Windows software with a cross-platform, 
 ## Key Features
 
 - **Simultaneous Dual-Pump Control**: Control Channel A (Connector 1 / Rack 1) and Channel B (Connector 2 / Rack 2) independently with dedicated syringe inner diameters, flow rates, and infusion targets.
-- **Multi-Step Sequential Programs**: Configure and chain complex infusion/withdrawal sequences across multiple steps with custom flow rates and step durations.
-- **Save & Load Programs**: Compatible with standard multi-step program text files (`.txt`).
-- **Physical Limit Switch Detection**: Real-time reading of microswitch limit sensors (`0x32` status responses) for home position tracking and stall prevention.
+- **Multi-Step Sequential Programs**: Configure and chain complex infusion/withdrawal sequences across multiple steps with custom flow rates, durations, and directional toggles. Compatible with standard `.txt` program scripts.
+- **Interactive Curve & Waveform Presets**:
+  - **8 Parametric Presets**: Constant, Linear Ramp, Shifted Sine, Shifted Cosine, Sawtooth, Triangle, Pulse / Step, and Custom Equations.
+  - **Custom Bézier Splines**: Interactive piecewise cubic Bézier curves with draggable knots and tangent handles on real-time HTML5 canvases (double-click to add knot, right-click to remove).
+  - **Safe AST Math Expressions**: Safely evaluate user-defined mathematical equations like `1.0 + 0.5 * sin(2 * pi * t / T)` using an AST-whitelisted evaluator.
+  - **Dual-Channel Linking**: Support for Independent channels, Push-Pull sinusoidal oscillation, and linear scaling ratios ($B = k \cdot A$).
+  - **Sub-Second Discretization ($10\text{ ms}$ Hardware Resolution)**: User-controlled time slicing ($0.05\text{ s}$–$10.0\text{ s}$) with quick-select pills (`0.1s`, `0.25s`, `0.5s`, `1.0s`, `2.0s`) for smooth speed ramping without staircase velocity jumps.
+  - **Zero-Backlash Motion Pipeline**: Pre-buffered serial frame compilation and low-latency completion polling ($5\text{ ms}$) prevent motor stopping between slices, eliminating mechanical lead-screw de-tensioning and fluid pressure dips.
+- **Physical Limit Switch Detection**: Real-time reading of microswitch limit sensors (`0x32`, `0x23`, `0x24`, `0x46`, `0x50`) for home position tracking and stall prevention.
 - **Hardware Safety Interlocks**:
-  - Independent homing for Pump 1, Pump 2, or both synchronously.
-  - Latching Emergency Stop (`ESTOP`) with instant serial motor halt.
-  - Directional safety guards (prevents withdrawal when parked at home limit switches).
-  - Validation bounds for syringe dimensions, volume targets, and flow rate limits.
+  - Independent homing for Pump 1 (`0x1A`), Pump 2 (`0x1B`), or both synchronously (`0x19`).
+  - Latching Emergency Stop (`ESTOP`) with instantaneous serial motor halt (`0x14`).
+  - Directional safety guards (blocks reverse withdrawal when parked at home limit switches).
+  - Syringe capacity and swept volume limit guards.
 - **Bit-for-Bit Protocol Fidelity**: Reverse-engineered microcontroller timer registers, 16-bit prescaler ladders (1, 8, 64, 256, 1024), and mechanism scaling verified against native firmware disassembly.
-- **Modern Responsive Web UI**: Clean dashboard built with Vanilla JavaScript and semantic HTML5/CSS3. Zero clunky frameworks, no margin clipping, with real-time countdown timers and hardware status badges.
+- **Modern Responsive Web UI**: Clean dashboard built with Vanilla JavaScript and semantic HTML5/CSS3. High-contrast themes, real-time countdown clocks, dynamic preview synchronizer, and zero framework bloat.
 - **RESTful API**: Comprehensive API endpoints for laboratory automation, external robotics, and headless microfluidic workflows.
 
 ---
@@ -49,39 +59,41 @@ This system replaces legacy proprietary Windows software with a cross-platform, 
 ## System Architecture
 
 ```
-+-----------------------------------------------------------------------+
-|                         Web Browser UI                                |
-|        (Dual-Axis Dashboard, Multi-Step Editor, Emergency Stop)       |
-+-----------------------------------------------------------------------+
-                                   |
-                             HTTP / JSON
-                         (Polling & REST API)
-                                   v
-+-----------------------------------------------------------------------+
-|                         FastAPI Server (app.py)                       |
-|           Endpoints: /api/state, /api/run, /api/home, /api/stop       |
-+-----------------------------------------------------------------------+
-                                   |
-+-----------------------------------------------------------------------+
-|                    Pump Engine State Machine (engine.py)               |
-|      - Threaded Execution Loop         - State & Limit Switch Cache   |
-|      - Channel Coordination (A & B)    - Emergency Stop Latch         |
-+-----------------------------------------------------------------------+
-                                   |
-+-----------------------------------------------------------------------+
-|                     Protocol Driver (device.py / protocol.py)         |
-|      - Binary Frame Construction       - Bounded Read Timeouts        |
-|      - Channel-Specific Opcodes        - 0x32 Limit Sensor Decoding   |
-+-----------------------------------------------------------------------+
-                                   |
-                              RS-232 / USB
-                          (19200 Baud, 8N1)
-                                   v
-+-----------------------------------------------------------------------+
-|                   Holmarc Microcontroller Hardware                    |
-|      - Stepper Driver Axis 1 (A)       - Limit Microswitch Axis 1     |
-|      - Stepper Driver Axis 2 (B)       - Limit Microswitch Axis 2     |
-+-----------------------------------------------------------------------+
++-----------------------------------------------------------------------------------+
+|                                Web Browser UI                                     |
+|  (Dual-Axis Dashboard, Multi-Step Editor, Curve & Waveform Presets, ESTOP Panel)  |
++-----------------------------------------------------------------------------------+
+                                          |
+                                    HTTP / JSON
+                                (Polling & REST API)
+                                          v
++-----------------------------------------------------------------------------------+
+|                               FastAPI Server (app.py)                             |
+|     Endpoints: /api/state, /api/run, /api/home, /api/curve/preview, /api/stop     |
++-----------------------------------------------------------------------------------+
+                                          |
++-----------------------------------------------------------------------------------+
+|                         Pump Engine State Machine (engine.py)                     |
+|      - Threaded Execution Loop               - State & Limit Switch Cache         |
+|      - Channel Coordination (A & B)          - Pre-buffered Slice Chaining        |
+|      - Emergency Stop Latch                  - Curve Pipeline & Interpolator      |
++-----------------------------------------------------------------------------------+
+                                          |
++-----------------------------------------------------------------------------------+
+|                        Protocol Driver (device.py / protocol.py)                  |
+|      - Binary Frame Construction             - Low-Latency Serial Polling (5ms)   |
+|      - Channel-Specific Opcodes              - 0x32 Limit Sensor Decoding         |
+|      - Centisecond (10ms) Duration Encoding  - Full Duplex Packet Handshake       |
++-----------------------------------------------------------------------------------+
+                                          |
+                                     RS-232 / USB
+                                  (19200 Baud, 8N1)
+                                          v
++-----------------------------------------------------------------------------------+
+|                          Holmarc Microcontroller Hardware                         |
+|      - Stepper Driver Axis 1 (A / Rack 1)    - Limit Microswitch Axis 1 (A)       |
+|      - Stepper Driver Axis 2 (B / Rack 2)    - Limit Microswitch Axis 2 (B)       |
++-----------------------------------------------------------------------------------+
 ```
 
 ---
@@ -123,44 +135,56 @@ Communication operates at **19200 baud, 8 data bits, no parity, 1 stop bit (8N1)
 
 | Hex Byte | Symbol | Description |
 |:--------:|:-------|:------------|
-| `0x0A`   | `CMD_ACK_OK` / `HEADER` | Packet start delimiter and affirmative response |
-| `0x05`   | `CMD_DEVICE`            | Connection handshake probe |
-| `0x28`   | `CMD_PROG_START`        | Arms controller for parameter frame ingestion |
-| `0x0F`   | `CMD_PROG_END`          | Frame end delimiter |
-| `0x14`   | `CMD_STOP`              | Immediate halt for all active axes |
-| `0x1A`   | `CMD_HOME_A`            | Command Rack 1 (Pump 1) to reverse to home switch |
-| `0x1B`   | `CMD_HOME_B`            | Command Rack 2 (Pump 2) to reverse to home switch |
-| `0x37`   | `CMD_RUN_A`             | Execute motion for Rack 1 (Pump 1) |
-| `0x19`   | `CMD_RUN_B`             | Execute motion for Rack 2 (Pump 2) |
-| `0x32`   | `STATUS_HOME_REACHED`   | Microswitch contact closed (axis at home limit) |
-| `0x16`   | `MODE_INFUSION`         | Forward motion (infusion direction) |
-| `0x17`   | `MODE_WITHDRAWAL`       | Reverse motion (withdrawal direction) |
+| `0x0A`   | `OPENER_PUMP_A` / `CMD_ACK_OK` | Packet start opener for Pump A & affirmative handshake response |
+| `0x28`   | `OPENER_PUMP_B` / `CMD_LIMIT`  | Packet start opener for Pump B parameter frames |
+| `0x05`   | `CMD_DEVICE`                   | Connection handshake probe |
+| `0x0F`   | `TRIGGER_FORWARD`              | Start Forward (Infusion) motion for queued frames |
+| `0x37`   | `TRIGGER_REVERSE`              | Start Reverse (Withdrawal) motion for queued frames |
+| `0x14`   | `CMD_STOP`                     | Immediate emergency stop / halt for all active axes |
+| `0x1A`   | `CMD_HOME_A`                   | Home Pump 1 / Rack A |
+| `0x1B`   | `CMD_HOME_B`                   | Home Pump 2 / Rack B |
+| `0x19`   | `CMD_HOME_BOTH`                | Home both pumps simultaneously |
+| `0x1E`   | `ACK_ALL_DONE`                 | All active programs / motion steps completed |
+| `0x1F`   | `ACK_PUMP_A_DONE_FWD`          | Pump A forward infusion motion complete |
+| `0x20`   | `ACK_PUMP_B_DONE_FWD`          | Pump B forward infusion motion complete |
+| `0x3C`   | `ACK_PUMP_A_DONE_REV`          | Pump A reverse withdrawal motion complete |
+| `0x4B`   | `ACK_PUMP_B_DONE_REV`          | Pump B reverse withdrawal motion complete |
+| `0x32`   | `CMD_HOME_ACK` / `LIMIT`       | Microswitch contact closed (axis at home limit) |
+| `0x23`   | `ACK_FAR_LIMIT_A`              | Pump A far limit sensor reached |
+| `0x24`   | `ACK_FAR_LIMIT_B`              | Pump B far limit sensor reached |
 
-#### 10-Byte Parameter Frame Structure
+#### 9-Byte Parameter Frame Structure
 
-Each motion sequence sends a 10-byte parameter packet:
+Each motion frame sends 9 bytes:
 
 ```
-[0x0A] [0x83] [T_HI] [T_LO] [P_HI] [P_LO] [D_B3] [D_B2] [D_B1] [0x0F]
+[OPENER] [TDSP_HI] [TDSP_LO] [DUR_3] [DUR_2] [DUR_1] [DUR_0] [PRESC_HI] [PRESC_LO]
 ```
 
-- Byte 0: Header (`0x0A`)
-- Byte 1: Channel/Config identifier (`0x83`)
-- Bytes 2-3: Timer counter value `tdsp` (16-bit big-endian unsigned short)
-- Bytes 4-5: Hardware prescaler index (16-bit big-endian unsigned short)
-- Bytes 6-8: Total step duration in hundredths of a second ($t \times 100$, 24-bit big-endian)
-- Byte 9: Footer (`0x0F`)
+- Byte 0: Opener (`0x0A` for Pump A, `0x28` for Pump B)
+- Bytes 1-2: Timer counter value `tdsp` (16-bit big-endian unsigned short)
+- Bytes 3-6: Duration in hundredths of a second ($t \times 100$, 32-bit big-endian unsigned int)
+- Bytes 7-8: Hardware prescaler index (16-bit big-endian unsigned short)
+
+### Centisecond Sub-Second Timing & Backlash Elimination
+
+Because duration is encoded as centiseconds ($10\text{ ms}$ units), the controller natively accepts sub-second durations ($0.1\text{ s} \to 10$, $0.25\text{ s} \to 25$). 
+
+During curve execution:
+1. **Pre-buffered Frame Pipeline**: While slice $N$ is executing on the hardware, the software pre-builds the 9-byte packet for slice $N+1$.
+2. **Low-Latency Polling ($5\text{ ms}$)**: Completion monitoring uses $5\text{ ms}$ non-blocking reads instead of $50\text{ ms}$, reacting instantly when `ACK_ALL_DONE` arrives.
+3. **Continuous Preload Preservation**: Because inter-slice serial transmission completes in $<5\text{ ms}$, the stepper motor does not stop and settle to zero velocity. Fluid backpressure cannot de-tension the lead-screw nut, eliminating the mechanical backlash bump and pressure drop seen in coarse discretization.
 
 ---
 
 ## Hardware Setup & Wiring
 
-1. Connect the Dual Syringe Pump to your host computer via the USB-B or FTDI RS-232 serial cable.
+1. Connect the Dual Syringe Pump to your host computer via USB-B or FTDI RS-232 serial cable.
 2. Ensure both actuator stepper cable connectors are securely latched:
    - **Connector 1**: Rack 1 / Pump 1 (Channel A)
    - **Connector 2**: Rack 2 / Pump 2 (Channel B)
 3. Connect the 12V / 24V DC power supply to the pump base unit.
-4. Verify that the FTDI driver assigns a virtual COM port (e.g., `COM6` on Windows or `/dev/ttyUSB0` on Linux). If the device is not detected automatically, install the driver using `drivers/CDM212364_Setup_Win_11.exe`.
+4. Verify that the FTDI driver assigns a virtual COM port (e.g., `COM6` on Windows or `/dev/ttyUSB0` on Linux). If needed, install drivers from the `drivers/` directory.
 
 ---
 
@@ -169,11 +193,11 @@ Each motion sequence sends a 10-byte parameter packet:
 ### Prerequisites
 
 - Python 3.10, 3.11, 3.12, 3.13, or 3.14
-- FTDI Virtual COM Port Driver (usually installed automatically by Windows Update)
+- FTDI Virtual COM Port Driver
 
-### Automated Windows Launcher
+### Windows One-Click Launcher
 
-Double-click `start.bat` in the repository root. The script checks your environment, launches the web application server, and displays the local URL.
+Double-click `start.bat` in the repository root. The launcher verifies the environment, starts the FastAPI server, and launches your browser.
 
 ### Manual Setup
 
@@ -183,7 +207,7 @@ Double-click `start.bat` in the repository root. The script checks your environm
    cd dual-syringe-pump
    ```
 
-2. **Create and activate a virtual environment (optional but recommended):**
+2. **Create and activate a virtual environment:**
    ```bash
    python -m venv .venv
    # Windows:
@@ -203,108 +227,65 @@ Double-click `start.bat` in the repository root. The script checks your environm
    ```
 
 5. **Open the Web UI:**
-   Navigate to [http://localhost:8077](http://localhost:8077) in any modern web browser.
+   Navigate to [http://localhost:8077](http://localhost:8077) in any web browser.
 
 ---
 
 ## Web Interface Overview
 
-The web dashboard is organized into intuitive, high-visibility control surfaces:
+The web dashboard is organized into three dedicated operating modes:
 
-- **Top Navigation Bar**: Live COM port selector, dynamic refresh/rescan button, and Connect/Disconnect toggle.
-- **Dual Pump Control (Simultaneous)**:
-  - Separate parameter cards for **PUMP 1** and **PUMP 2**.
-  - Checkboxes to toggle individual pump activation.
-  - Inputs for Syringe Diameter ($\text{mm}$), Flow Rate, and Units ($\mu\text{L/hr}$, $\mu\text{L/min}$, $\text{mL/hr}$, $\text{mL/min}$).
-  - Target Mode selection by **Duration** (seconds, minutes, hours) or **Target Volume** ($\mu\text{L}$, $\text{mL}$).
-  - Live calculated duration and countdown timer.
-- **Multi-Step Program (Sequential)**:
-  - Step table editor supporting up to 5 programmable steps.
-  - Per-step configuration of diameter, flow rate, duration, and direction.
-  - File toolbar to **Load** and **Save** `.txt` program scripts.
-- **Global Control Toolbar**:
-  - `EMERGENCY STOP`: High-priority red button for instantaneous software and hardware halt.
-  - `INFUSION` / `WITHDRAWAL`: Direction toggle with safety interlocks.
-  - `Home Both`, `Home 1`, `Home 2`: Dedicated homing routines with microswitch feedback.
-  - `Run` and `Stop`: Primary motion triggers.
-- **Live Hardware Telemetry**: Real-time status badges displaying home switch states (`0x32`), active channel execution, and communication link status.
+### 1. Dual Pump Control (Simultaneous)
+- Independent parameter cards for **PUMP 1** and **PUMP 2**.
+- Inner diameter ($\text{mm}$), Flow Rate, and Units ($\mu\text{L/hr}$, $\mu\text{L/min}$, $\text{mL/hr}$, $\text{mL/min}$).
+- Target Mode selection by **Duration** (seconds, minutes, hours) or **Target Volume** ($\mu\text{L}$, $\text{mL}$).
+- Synchronous countdown timers and live volume displays.
+
+### 2. Multi-Step Program (Sequential)
+- Up to 5 programmable steps executed sequentially.
+- Per-step configuration of diameter, flow rate, duration, and individual infusion/withdrawal direction.
+- Load and Save `.txt` program scripts compatible with legacy Holmarc files.
+
+### 3. Curve & Waveform Presets (Dynamic Profiling)
+- **Presets**: Constant, Linear Ramp, Shifted Sine, Shifted Cosine, Sawtooth, Triangle, Pulse/Step, or Custom Equation.
+- **Interactive Canvas**: Drag-and-drop Bézier control knots, edit tangent handles, or convert any preset directly into Bézier knots with `→ Bézier`.
+- **Time Discretization Control**: Numerical step input (`min="0.05" step="0.05"`) with quick-select pills (`0.1s`, `0.25s`, `0.5s`, `1.0s`, `2.0s`) and live resolution telemetry badges (e.g. `240 slices (4.0 Hz • 0.25s)`).
+- **Syringe Volume & Stroke Metrics**: Real-time integration of total infused volume, total withdrawn volume, required initial fill, required headspace, and peak linear stroke ($\text{mm}$).
 
 ---
 
 ## REST API Reference
 
-The FastAPI backend provides full programmatic control for automated laboratory workflows.
-
 ### Device State & Connection
-- `GET /api/state`  
-  Returns full telemetry: connection status, current COM port, active mode, channel parameters, homing states, and limit switch statuses.
-- `POST /api/connect`  
-  Connects to a specified serial port: `{"port": "COM6"}`.
-- `POST /api/disconnect`  
-  Closes the active serial connection safely.
-- `GET /api/ports`  
-  Lists all available hardware COM ports detected on the system.
+- `GET /api/state` — Full telemetry: connection status, current COM port, active mode, channel parameters, homing states, and limit switch statuses.
+- `POST /api/connect` — Connects to a serial port: `{"port": "COM6"}`.
+- `POST /api/disconnect` — Closes active serial connection safely.
+- `GET /api/ports` — Lists all available hardware COM ports.
 
 ### Motion Control
-- `POST /api/pump`  
-  Configures parameters for an individual pump rack:
-  ```json
-  {
-    "axis": "A",
-    "diameter": 20.0,
-    "flowRate": 10.0,
-    "flowRateUnit": 3,
-    "durationType": 0,
-    "duration": 60.0,
-    "durationUnit": 0,
-    "enabled": true
-  }
-  ```
-- `POST /api/mode`  
-  Switches controller between simultaneous dual-pump mode and sequential multi-step mode:
-  ```json
-  {"mode": "dual"}  // or "steps"
-  ```
-- `POST /api/run`  
-  Begins motion execution for active configuration:
-  ```json
-  {"mode": "dual"}
-  ```
-- `POST /api/stop`  
-  Halts running motion cleanly.
-- `POST /api/emergency-stop`  
-  Triggers immediate emergency halt and latches the safety state until cleared.
-- `POST /api/home`  
-  Runs homing routine for specified axis:
-  ```json
-  {"target": "both"}  // or "A", "B"
-  ```
-- `POST /api/withdrawal`  
-  Sets direction mode: `{"value": false}` for infusion, `{"value": true}` for withdrawal.
+- `POST /api/mode` — Switches mode: `{"mode": "dual"}`, `{"mode": "steps"}`, or `{"mode": "curve"}`.
+- `POST /api/pump` — Configures parameters for an individual pump rack.
+- `POST /api/run` — Begins motion execution for active mode.
+- `POST /api/stop` — Halts running motion cleanly.
+- `POST /api/emergency-stop` — Triggers immediate emergency halt and latches safety state.
+- `POST /api/home` — Runs homing routine: `{"target": "both"}` (`"A"` or `"B"`).
+- `POST /api/withdrawal` — Sets direction mode: `{"value": false}` (infuse) or `{"value": true}` (withdraw).
+
+### Curve & Waveform Presets
+- `POST /api/curve/preview` — Evaluates and compiles dual-channel curve configuration without committing to run state. Returns high-resolution points, per-channel metrics, warnings, and compiled hardware slices.
+- `POST /api/curve/config` — Saves curve configuration and recomputes preview.
 
 ### Multi-Step Programming
-- `POST /api/step`  
-  Updates a specific step in the sequential program:
-  ```json
-  {
-    "index": 0,
-    "diameter": 20.0,
-    "flowRate": 5.0,
-    "flowRateUnit": 3,
-    "duration": 30.0,
-    "withdrawal": false
-  }
-  ```
-- `POST /api/selected`  
-  Selects which program steps are executed: `{"selected": [true, true, false, false, false]}`.
+- `POST /api/step` — Updates a specific step in the sequential program.
+- `POST /api/selected` — Selects which steps are executed: `{"selected": [true, true, false, false, false]}`.
 
 ---
 
 ## Test Suite & Verification
 
-The project includes an extensive test suite with **93 automated unit and integration tests** verifying protocol framing, speed formula arithmetic, safety guards, fake serial hardware simulation, and REST endpoints.
+The project includes an automated test suite with **122 unit and integration tests** verifying protocol framing, speed formula arithmetic, safety guards, fake serial hardware simulation, curve math, and REST endpoints.
 
-To run the complete test suite:
+Run the test suite:
 
 ```bash
 pytest tests -v
@@ -312,10 +293,12 @@ pytest tests -v
 
 ### Test Modules
 
-- `tests/test_dual.py`: Simultaneous dual-pump framing, dual homing, and channel coordination.
-- `tests/test_engine.py`: Threading, state machine transitions, timeout handling, and stop execution.
+- `tests/test_curves.py`: Mathematical curve evaluation, AST equation validation, Bézier evaluation, sub-second slicing, and centisecond hardware packet verification.
+- `tests/test_preset_parameters.py`: Exhaustive validation of all 8 presets across diverse amplitude, frequency, phase, offset, duty cycle, push-pull, and unit configurations.
+- `tests/test_dual.py`: Simultaneous dual-pump framing, dual homing, independent channel limits, and channel coordination.
+- `tests/test_engine.py`: Threading, state machine transitions, timeout handling, and sub-second curve worker execution.
 - `tests/test_fidelity.py`: Verification of prescaler ladders and mathematical models against original .NET IL disassembly.
-- `tests/test_framing.py`: Packet encoding, 16-bit/32-bit big-endian conversions, and delimiter checks.
+- `tests/test_framing.py`: Binary packet encoding, sub-second centisecond duration conversion, and delimiter checks.
 - `tests/test_safety.py`: Parameter bounds, volume thresholds, emergency stop guards, and home switch interlocks.
 - `tests/test_webapp_api.py`: FastAPI endpoint tests using `TestClient` and simulated serial hardware.
 - `tests/fake_pump.py`: High-fidelity software mock of the Holmarc microcontroller serial firmware.
@@ -333,16 +316,18 @@ dual-syringe-pump/
 ├── README.md               # Complete project documentation
 ├── pump/                   # Core Python control package
 │   ├── __init__.py         # Package initialization
-│   ├── device.py           # Serial port driver and low-level framing
-│   ├── engine.py           # State machine, threading, and pump orchestration
-│   ├── program.py          # Math formulas, prescalers, and step parsing
-│   ├── protocol.py         # Hardware opcode constants and frame builders
+│   ├── curves.py           # Curve compilation, Bézier math, and AST equation evaluator
+│   ├── device.py           # Low-latency serial driver, framing, and limit decoding
+│   ├── engine.py           # State machine, threading, and zero-backlash curve pipeline
+│   ├── program.py          # Math formulas, prescalers, and program step parser
+│   ├── protocol.py         # Hardware opcode constants and 9-byte frame builders
 │   ├── safety.py           # Input validation, bounds checks, and interlocks
 │   └── probe.py            # Diagnostic protocol verification harness
-├── static/                 # Frontend web application
+├── static/                 # Frontend web dashboard
 │   ├── index.html          # Semantic HTML5 dashboard layout
-│   ├── style.css           # Custom responsive styling (no framework bloat)
-│   └── app.js              # State polling, UI binding, and REST client
+│   ├── style.css           # Custom responsive styling and theme variables
+│   ├── app.js              # State polling, UI binding, and REST client
+│   └── curves.js           # Interactive Bézier canvas visualizer & preset manager
 ├── examples/               # Sample multi-step program files
 │   ├── sample_program.txt  # Standard 5-step infusion test
 │   ├── dual_program.txt    # Dual-channel program example
@@ -350,12 +335,14 @@ dual-syringe-pump/
 ├── drivers/                # USB-to-Serial converter driver installers
 │   ├── CDM212364_Setup_Win_11.exe # Windows 10 & 11 driver setup
 │   └── CDM v2.12.00 WHQL Certified.exe # WHQL certified driver setup
-└── tests/                  # Automated test suite (93 tests)
+└── tests/                  # Automated test suite (122 tests)
     ├── conftest.py / fake_pump.py  # Mock serial port hardware simulation
+    ├── test_curves.py      # Mathematical curve and sub-second slice tests
+    ├── test_preset_parameters.py # Parameter tests for all presets
     ├── test_dual.py        # Dual pump execution tests
-    ├── test_engine.py      # State machine tests
+    ├── test_engine.py      # State machine and curve worker tests
     ├── test_fidelity.py    # Firmware formula verification tests
-    ├── test_framing.py     # Binary packet encoding tests
+    ├── test_framing.py     # Binary packet encoding and timing tests
     ├── test_probe.py       # Handshake probe tests
     ├── test_program.py     # Program file parsing and math tests
     ├── test_safety.py      # Safety interlocks and boundary tests

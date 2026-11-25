@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from pump import curves as curves_mod
 from pump import device as device_mod
 from pump.engine import controller
 from pump.program import parse_program_text
@@ -260,6 +261,25 @@ def withdrawal(request: WithdrawalRequest) -> JSONResponse:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return JSONResponse(controller.state())
+
+
+@app.post("/api/curve/preview")
+def curve_preview(payload: dict[str, Any]) -> JSONResponse:
+    try:
+        compiled = curves_mod.compile_curve_config(payload)
+        out = {k: v for k, v in compiled.items() if k != "_compiled_slices"}
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse(out)
+
+
+@app.post("/api/curve/config")
+def curve_config(payload: dict[str, Any]) -> JSONResponse:
+    try:
+        preview = controller.set_curve_config(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return JSONResponse({"preview": preview, "state": controller.state()})
 
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
