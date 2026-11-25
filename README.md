@@ -8,12 +8,13 @@
 
 A modern, high-precision, web-based control application and serial protocol driver for dual-axis microfluidic syringe pumps (specifically engineered for Holmarc Dual Syringe Pump hardware).
 
-This system replaces legacy proprietary Windows software with a cross-platform, asynchronous Python architecture featuring simultaneous dual-rack dispensing, multi-step sequential programming, interactive mathematical curve/waveform presets, real-time hardware limit-switch monitoring, sub-second continuous velocity ramping, and a responsive web dashboard.
+This project is an **engineered upgrade and open-source modernization of the legacy manufacturer software** (`Dual Syringe Pump.exe` / `DualPump.exe`). It preserves 100% mathematical and wire-protocol fidelity with the physical microcontroller firmware while replacing the rigid legacy desktop interface with a cross-platform, asynchronous Python architecture featuring simultaneous dual-rack dispensing, multi-step sequential programming, interactive mathematical curve/waveform presets, real-time hardware limit-switch monitoring, sub-second continuous velocity ramping, and a responsive web dashboard.
 
 ---
 
 ## Table of Contents
 
+- [Overview & Legacy Software Modernization](#overview--legacy-software-modernization)
 - [Key Features](#key-features)
 - [System Architecture](#system-architecture)
 - [Mathematical Model & Protocol Fidelity](#mathematical-model--protocol-fidelity)
@@ -30,6 +31,31 @@ This system replaces legacy proprietary Windows software with a cross-platform, 
 - [Test Suite & Verification](#test-suite--verification)
 - [Project Directory Structure](#project-directory-structure)
 - [License & Authors](#license--authors)
+
+---
+
+## Overview & Legacy Software Modernization
+
+This application was developed as a direct, next-generation upgrade to the original proprietary manufacturer software (`Dual Syringe Pump.exe` / `DualPump.exe` by Holmarc Opto-Mechatronics). 
+
+Rather than relying on closed-source, Windows-only legacy executables, this system provides a clean, open, and extensible foundation designed for modern research laboratories, microfluidics setups, and automated liquid handling.
+
+### What Makes This an Upgraded Version?
+
+| Capability | Legacy Manufacturer Software (`Dual Syringe Pump.exe`) | Next-Gen Upgraded Controller (This Project) |
+| :--- | :--- | :--- |
+| **Operating System** | Windows-only (legacy 32-bit .NET WinForms) | **Cross-platform**: Runs seamlessly on Linux, macOS, Raspberry Pi, and Windows |
+| **Architecture** | Monolithic local desktop application | **Decoupled Web Stack**: Asynchronous Python FastAPI backend + REST API + responsive HTML5 UI |
+| **Remote Access** | None (requires physical monitor at pump) | **Full LAN & Remote Access**: Control and monitor from any PC, tablet, or smartphone |
+| **Motion Modes** | Dual Pump & Multi-Step Sequential | **3 Operating Modes**: Dual Pump, Multi-Step, and **Dynamic Curve / Waveform Presets** |
+| **Velocity Ramping** | Coarse integer-second steps ($\ge 1\text{ s}$); audible motor jumps | **Sub-Second Continuous Ramping ($10\text{ ms}$ resolution)**: Smooth glissando speed transitions |
+| **Mechanical Backlash** | Dead stop between steps allows fluid pressure to de-tension lead screw | **Pre-buffered Zero-Backlash Pipeline**: Transmits next frame in $<5\text{ ms}$, preserving screw preload |
+| **Waveform & Bézier Curves** | Not supported | **8 Waveform Presets, Custom AST Equations & Draggable Bézier Splines** |
+| **Dual-Axis Synchronization**| Basic simultaneous on/off | **Channel Linking**: Push-Pull (Sin/Cos), Master-Follower ratio ($B = k \cdot A$), or Independent |
+| **Laboratory Automation** | None (manual GUI clicks only) | **Full RESTful API**: Headless automation via Python, MATLAB, LabVIEW, or ROS robotics |
+| **File Format Support** | Proprietary `.txt` scripts | **100% Backward Compatible**: Load/Save legacy `.txt` files + modern JSON REST payloads |
+| **Safety Interlocks** | Basic limit detection | **Real-Time Limit Feedback**, Latching ESTOP, and Directional Home Safety Guards |
+| **Verification & Tests** | None published | **Automated Test Suite (122 tests)**: Protocol framing, timing math, and safety boundaries |
 
 ---
 
