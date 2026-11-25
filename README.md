@@ -236,17 +236,28 @@ Double-click `start.bat` in the repository root. The launcher verifies the envir
 The web dashboard is organized into three dedicated operating modes:
 
 ### 1. Dual Pump Control (Simultaneous)
+
+![Dual Pump Control Dashboard](docs/images/dual_pump_control.jpg)
+
 - Independent parameter cards for **PUMP 1** and **PUMP 2**.
 - Inner diameter ($\text{mm}$), Flow Rate, and Units ($\mu\text{L/hr}$, $\mu\text{L/min}$, $\text{mL/hr}$, $\text{mL/min}$).
 - Target Mode selection by **Duration** (seconds, minutes, hours) or **Target Volume** ($\mu\text{L}$, $\text{mL}$).
 - Synchronous countdown timers and live volume displays.
 
 ### 2. Multi-Step Program (Sequential)
+
+![Multi-Step Program Editor](docs/images/multistep_program.jpg)
+
 - Up to 5 programmable steps executed sequentially.
 - Per-step configuration of diameter, flow rate, duration, and individual infusion/withdrawal direction.
 - Load and Save `.txt` program scripts compatible with legacy Holmarc files.
 
 ### 3. Curve & Waveform Presets (Dynamic Profiling)
+
+![Curve Time Axis & Discretization Controls](docs/images/curve_discretization_controls.png)
+
+![Curve & Waveform Presets Dual Channel Canvas](docs/images/curve_waveforms_preview.jpg)
+
 - **Presets**: Constant, Linear Ramp, Shifted Sine, Shifted Cosine, Sawtooth, Triangle, Pulse/Step, or Custom Equation.
 - **Interactive Canvas**: Drag-and-drop Bézier control knots, edit tangent handles, or convert any preset directly into Bézier knots with `→ Bézier`.
 - **Time Discretization Control**: Numerical step input (`min="0.05" step="0.05"`) with quick-select pills (`0.1s`, `0.25s`, `0.5s`, `1.0s`, `2.0s`) and live resolution telemetry badges (e.g. `240 slices (4.0 Hz • 0.25s)`).
@@ -314,6 +325,8 @@ dual-syringe-pump/
 ├── start.bat               # Windows one-click startup batch script
 ├── .gitignore              # Git ignore rules for Python, caches, and IDEs
 ├── README.md               # Complete project documentation
+├── docs/                   # Documentation and UI screenshots
+│   └── images/             # Dashboard and waveform interface screenshots
 ├── pump/                   # Core Python control package
 │   ├── __init__.py         # Package initialization
 │   ├── curves.py           # Curve compilation, Bézier math, and AST equation evaluator
