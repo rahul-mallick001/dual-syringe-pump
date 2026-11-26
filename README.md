@@ -218,42 +218,59 @@ During curve execution:
 
 ### Prerequisites
 
-- Python 3.10, 3.11, 3.12, 3.13, or 3.14
-- FTDI Virtual COM Port Driver
+- Python 3.10, 3.11, 3.12, 3.13, or 3.14 (download from [python.org](https://www.python.org/downloads/) with **"Add Python to PATH"** checked)
+- FTDI Virtual COM Port Driver (included in the `drivers/` folder)
 
-### Windows One-Click Launcher
+---
 
-Double-click `start.bat` in the repository root. The launcher verifies the environment, starts the FastAPI server, and launches your browser.
+### Option 1: One-Click Setup & Launch (Recommended for Windows)
 
-### Manual Setup
+1. **One-Click Installation**: Double-click **`setup.bat`** in the project folder.
+   - Automatically detects your Python 3 installation.
+   - Creates an isolated `.venv` virtual environment.
+   - Installs and verifies all required libraries (`fastapi`, `uvicorn`, `pyserial`, `pydantic`).
+   - Automatically generates a **"Dual Syringe Pump"** shortcut on your Desktop.
+   - Prompts to launch the application immediately.
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/rahul-mallick001/dual-syringe-pump.git
-   cd dual-syringe-pump
-   ```
+2. **Daily One-Click Run**: Double-click **`start.bat`** (or the Desktop shortcut).
+   - Starts the server and opens your default browser at `http://127.0.0.1:8077`.
+   - *Zero Configuration*: If run on a new machine without running `setup.bat` first, `start.bat` automatically detects missing dependencies, performs the complete setup, and opens the dashboard in one click!
 
-2. **Create and activate a virtual environment:**
-   ```bash
-   python -m venv .venv
-   # Windows:
-   .venv\Scripts\activate
-   # Linux / macOS:
-   source .venv/bin/activate
-   ```
+---
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+### Option 2: Linux / macOS / Raspberry Pi One-Click Setup
 
-4. **Run the server:**
-   ```bash
-   python app.py
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/rahul-mallick001/dual-syringe-pump.git
+cd dual-syringe-pump
 
-5. **Open the Web UI:**
-   Navigate to [http://localhost:8077](http://localhost:8077) in any web browser.
+# Make scripts executable and run one-click setup
+chmod +x setup.sh start.sh
+./setup.sh
+
+# Launch the app (starts server and opens browser)
+./start.sh
+```
+
+---
+
+### Option 3: Manual Installation
+
+```bash
+# 1. Create and activate virtual environment
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# Linux / macOS:
+source .venv/bin/activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Launch application
+python app.py
+```
 
 ---
 
@@ -348,7 +365,10 @@ pytest tests -v
 dual-syringe-pump/
 ├── app.py                  # FastAPI web server and REST API application
 ├── requirements.txt        # Python package dependencies
-├── start.bat               # Windows one-click startup batch script
+├── setup.bat               # Windows one-click automated setup and installer
+├── start.bat               # Windows one-click launcher (with auto-setup fallback)
+├── setup.sh                # Linux / macOS / Raspberry Pi one-click setup script
+├── start.sh                # Linux / macOS / Raspberry Pi one-click launcher
 ├── .gitignore              # Git ignore rules for Python, caches, and IDEs
 ├── README.md               # Complete project documentation
 ├── docs/                   # Documentation and UI screenshots
