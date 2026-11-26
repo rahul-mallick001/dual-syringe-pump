@@ -28,6 +28,14 @@ STATIC_DIR = BASE_DIR / "static"
 app = FastAPI(title="Dual Syringe Pump", version="2.0.0")
 
 
+@app.middleware("http")
+async def _no_cache_static(request, call_next):
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------

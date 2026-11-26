@@ -83,7 +83,7 @@ echo.
 
 REM 5. Desktop Shortcut Creation
 echo [4/4] Creating Desktop Shortcut...
-powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'Dual Syringe Pump.lnk')); $s.TargetPath = [System.IO.Path]::Combine('%~dp0', 'start.bat'); $s.WorkingDirectory = '%~dp0'; $s.Description = 'Dual Syringe Pump Controller'; $s.Save()" >nul 2>nul
+powershell -NoProfile -Command "$lnk = [System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'Dual Syringe Pump.lnk'); if (Test-Path $lnk) { Remove-Item $lnk -Force }; $ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut($lnk); $s.TargetPath = [System.IO.Path]::Combine('%~dp0', 'start.bat'); $s.WorkingDirectory = '%~dp0'; $s.Description = 'Dual Syringe Pump Controller'; $s.Save()" >nul 2>nul
 if !ERRORLEVEL! EQU 0 (
     echo       Desktop shortcut 'Dual Syringe Pump' created!
 ) else (
